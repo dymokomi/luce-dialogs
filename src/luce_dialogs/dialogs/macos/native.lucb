@@ -1,0 +1,54 @@
+#==============================================================================================
+#
+#   native - NSOpenPanel and NSSavePanel
+#
+#   DESCRIPTION:
+#       AppKit's panels, run modally. The panel is autoreleased; its chosen URL's path is
+#       copied out before the pool drains.
+#
+#==============================================================================================
+
+extern func objc_getClass(name: c.str) -> void*?
+extern func sel_registerName(name: c.str) -> void*
+extern func objc_autoreleasePoolPush() -> void*
+extern func objc_autoreleasePoolPop(pool: void*)
+## Naming an AppKit symbol links AppKit for programs that only open dialogs.
+extern var NSApplicationDidFinishLaunchingNotification: void*
+extern func msg_object as "objc_msgSend"(object: void*, selector: void*) -> void*?
+extern func msg_set_object as "objc_msgSend"(object: void*, selector: void*, value: void*?)
+extern func msg_set_bool as "objc_msgSend"(object: void*, selector: void*, value: bool)
+extern func msg_int as "objc_msgSend"(object: void*, selector: void*) -> i64
+extern func msg_size as "objc_msgSend"(object: void*, selector: void*, encoding: u64) -> usize
+extern func msg_init as "objc_msgSend"(object: void*, selector: void*, bytes: const u8*, size: usize, encoding: u64) -> void*?
+extern func msg_release as "objc_msgSend"(object: void*, selector: void*)
+
+func mac_text(text: str) -> void*!:
+    let native_type = objc_getClass("NSString") else error(failed, "Foundation strings are unavailable")
+    let allocated = msg_object(native_type, sel_registerName("alloc")) else error(failed, "could not allocate dialog text")
+    return msg_init(allocated, sel_registerName("initWithBytes:length:encoding:"), text.bytes.data, text.length, 4) else error(failed, "could not create dialog text")
+
+func mac_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
+    let pool = objc_autoreleasePoolPush()
+    defer objc_autoreleasePoolPop(pool)
+    discard(NSApplicationDidFinishLaunchingNotification)
+    let native_type = objc_getClass("NSSavePanel" if save else "NSOpenPanel") else error(failed, "AppKit panels are unavailable")
+    let panel = msg_object(native_type, sel_registerName("savePanel" if save else "openPanel")) else error(failed, "could not create the file panel")
+    let caption = try mac_text(message)
+    defer msg_release(caption, sel_registerName("release"))
+    msg_set_object(panel, sel_registerName("setMessage:"), caption)
+    if save:
+        let suggested = try mac_text(name)
+        defer msg_release(suggested, sel_registerName("release"))
+        msg_set_object(panel, sel_registerName("setNameFieldStringValue:"), suggested)
+    else:
+        msg_set_bool(panel, sel_registerName("setCanChooseFiles:"), true)
+        msg_set_bool(panel, sel_registerName("setCanChooseDirectories:"), false)
+        msg_set_bool(panel, sel_registerName("setAllowsMultipleSelection:"), false)
+    # NSModalResponseOK is 1.
+    if msg_int(panel, sel_registerName("runModal")) != 1:
+        return none
+    let url = msg_object(panel, sel_registerName("URL")) else return none
+    let path = msg_object(url, sel_registerName("path")) else error(failed, "the chosen file has no path")
+    let length = msg_size(path, sel_registerName("lengthOfBytesUsingEncoding:"), 4)
+    let bytes = msg_object(path, sel_registerName("UTF8String")) else error(failed, "the chosen path is not UTF-8")
+    return try interop.copy_text((str)u8[]((u8*)bytes, length))

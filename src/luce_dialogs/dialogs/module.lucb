@@ -1,0 +1,42 @@
+#==============================================================================================
+#
+#   dialogs - Native file dialogs
+#
+#   DESCRIPTION:
+#       The desktop's own open and save file panels, run modally from the UI thread. A chosen
+#       path is returned owning its bytes; a cancelled dialog returns none.
+#
+#==============================================================================================
+
+import c
+import interop
+import memory
+import platform
+import thread
+import window
+## The dialog could not be shown or its result could not be read.
+pub let failed: ErrorCode = ErrorCode.package(123)
+
+## Ask for an existing file to open, with `message` above the file list.
+## Returns the chosen path, or none when the dialog was cancelled.
+pub func open_file(message: str) -> interop.Owned[str]?!:
+    try check_access()
+    if platform.macos:
+        return try mac_choose(message, "", false)
+    if platform.windows:
+        return try win_choose(message, "", false)
+    error(window.unsupported, "native file dialogs are unavailable on this target")
+
+## Ask where to save a file, suggesting `name`, with `message` above the field.
+## Returns the chosen path, or none when the dialog was cancelled.
+pub func save_file(message: str, name: str) -> interop.Owned[str]?!:
+    try check_access()
+    if platform.macos:
+        return try mac_choose(message, name, true)
+    if platform.windows:
+        return try win_choose(message, name, true)
+    error(window.unsupported, "native file dialogs are unavailable on this target")
+
+func check_access() -> !:
+    if not thread.is_main():
+        error(window.wrong_thread, "file dialogs belong to the UI thread")

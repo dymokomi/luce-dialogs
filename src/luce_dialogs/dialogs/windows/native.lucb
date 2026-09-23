@@ -1,0 +1,89 @@
+#==============================================================================================
+#
+#   native - GetOpenFileNameW and GetSaveFileNameW
+#
+#   DESCRIPTION:
+#       The common dialogs of comdlg32, run modally. Text crosses as UTF-16; the chosen path
+#       comes back in the caller's buffer and is copied out as UTF-8.
+#
+#==============================================================================================
+
+from windows_abi import MultiByteToWideChar, WideCharToMultiByte
+
+## OPENFILENAMEW, as comdlg32 lays it out for x64.
+extern struct WinOpenFileName:
+    size: u32
+    owner: void*?
+    instance: void*?
+    filter: u16*?
+    custom_filter: u16*?
+    custom_filter_capacity: u32
+    filter_index: u32
+    file: u16*
+    file_capacity: u32
+    file_title: u16*?
+    file_title_capacity: u32
+    initial_directory: u16*?
+    title: u16*?
+    flags: u32
+    file_offset: u16
+    file_extension: u16
+    default_extension: u16*?
+    custom_data: isize
+    hook: void*?
+    template_name: u16*?
+    reserved_pointer: void*?
+    reserved: u32
+    flags_extra: u32
+
+extern func GetOpenFileNameW(options: WinOpenFileName*) -> i32
+extern func GetSaveFileNameW(options: WinOpenFileName*) -> i32
+
+## `text` as a NUL-terminated UTF-16 buffer, allocated in the heap.
+func win_wide(text: str) -> u16[]!:
+    let wide = try alloc u16[text.length + 1] in memory.heap
+    var count: i32 = 0
+    if text.length > 0:
+        count = MultiByteToWideChar(65001, 8, (c.str)text, (i32)text.length, wide.data, (i32)wide.length - 1)
+        if count == 0:
+            free(wide) in memory.heap
+            error(failed, "the dialog text could not be converted to UTF-16")
+    wide[(usize)count] = 0
+    return wide
+
+func win_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
+    let title = try win_wide(message)
+    defer free(title) in memory.heap
+    let path = try alloc u16[32768] in memory.heap
+    defer free(path) in memory.heap
+    for index in 0..<path.length:
+        path[index] = 0
+    if save and name.length > 0:
+        let suggested = try win_wide(name)
+        defer free(suggested) in memory.heap
+        var index: usize = 0
+        while index < suggested.length and index + 1 < path.length:
+            path[index] = suggested[index]
+            index += 1
+    # OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR, plus FILEMUSTEXIST to
+    # open and OVERWRITEPROMPT to save.
+    var options = WinOpenFileName(size = 152, owner = none, instance = none, filter = none, custom_filter = none, custom_filter_capacity = 0, filter_index = 0,
+                                  file = path.data, file_capacity = (u32)path.length, file_title = none, file_title_capacity = 0, initial_directory = none,
+                                  title = title.data, flags = 0x80800 | 0x8 | (0x2 if save else 0x1000), file_offset = 0, file_extension = 0, default_extension = none,
+                                  custom_data = 0, hook = none, template_name = none, reserved_pointer = none, reserved = 0, flags_extra = 0)
+    let chosen = GetSaveFileNameW(&options) if save else GetOpenFileNameW(&options)
+    if chosen == 0:
+        return none
+    var length: usize = 0
+    while length < path.length and path[length] != 0:
+        length += 1
+    if length == 0:
+        return none
+    let needed = WideCharToMultiByte(65001, 0, path.data, (i32)length, none, 0, none, none)
+    if needed <= 0:
+        error(failed, "the chosen path could not be converted to UTF-8")
+    let bytes = try alloc u8[(usize)needed] in memory.heap
+    defer free(bytes) in memory.heap
+    if WideCharToMultiByte(65001, 0, path.data, (i32)length, bytes.data, needed, none, none) != needed:
+        error(failed, "the chosen path could not be converted to UTF-8")
+    return try interop.copy_text((str)bytes)
