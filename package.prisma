@@ -18,10 +18,10 @@ def package "luce-dialogs" {
     }
 
     def native "macos" {
-        list frameworks = ["AppKit", "Foundation"]
+        str[] frameworks = ["AppKit", "Foundation"]
     }
 
     def native "windows" {
-        list libraries = ["comdlg32"]
+        str[] libraries = ["comdlg32"]
     }
 }
