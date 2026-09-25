@@ -13,6 +13,7 @@ import interop
 import memory
 import platform
 import process
+import strings
 import thread
 import window
 ## The dialog could not be shown or its result could not be read.
@@ -23,11 +24,23 @@ pub let failed: ErrorCode = ErrorCode.package(123)
 pub func open_file(message: str) -> interop.Owned[str]?!:
     try check_access()
     if platform.macos:
-        return try mac_choose(message, "", false)
+        return try mac_choose(message, "", false, false)
     if platform.windows:
-        return try win_choose(message, "", false)
+        return try win_choose(message, "", false, false)
     if platform.linux:
-        return try linux_choose(message, "", false)
+        return try linux_choose(message, "", false, false)
+    error(window.unsupported, "native file dialogs are unavailable on this target")
+
+## Ask for one or more existing files to open, with `message` above the file
+## list. Returns the chosen paths one to a line, or none when cancelled.
+pub func open_files(message: str) -> interop.Owned[str]?!:
+    try check_access()
+    if platform.macos:
+        return try mac_choose(message, "", false, true)
+    if platform.windows:
+        return try win_choose(message, "", false, true)
+    if platform.linux:
+        return try linux_choose(message, "", false, true)
     error(window.unsupported, "native file dialogs are unavailable on this target")
 
 ## Ask where to save a file, suggesting `name`, with `message` above the field.
@@ -35,11 +48,11 @@ pub func open_file(message: str) -> interop.Owned[str]?!:
 pub func save_file(message: str, name: str) -> interop.Owned[str]?!:
     try check_access()
     if platform.macos:
-        return try mac_choose(message, name, true)
+        return try mac_choose(message, name, true, false)
     if platform.windows:
-        return try win_choose(message, name, true)
+        return try win_choose(message, name, true, false)
     if platform.linux:
-        return try linux_choose(message, name, true)
+        return try linux_choose(message, name, true, false)
     error(window.unsupported, "native file dialogs are unavailable on this target")
 
 func check_access() -> !:

@@ -21,13 +21,20 @@ extern func msg_int as "objc_msgSend"(object: void*, selector: void*) -> i64
 extern func msg_size as "objc_msgSend"(object: void*, selector: void*, encoding: u64) -> usize
 extern func msg_init as "objc_msgSend"(object: void*, selector: void*, bytes: const u8*, size: usize, encoding: u64) -> void*?
 extern func msg_release as "objc_msgSend"(object: void*, selector: void*)
+extern func msg_at as "objc_msgSend"(object: void*, selector: void*, index: u64) -> void*?
 
 func mac_text(text: str) -> void*!:
     let native_type = objc_getClass("NSString") else error(failed, "Foundation strings are unavailable")
     let allocated = msg_object(native_type, sel_registerName("alloc")) else error(failed, "could not allocate dialog text")
     return msg_init(allocated, sel_registerName("initWithBytes:length:encoding:"), text.bytes.data, text.length, 4) else error(failed, "could not create dialog text")
 
-func mac_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
+## `path`, an NSString, as UTF-8 bytes borrowed until the pool drains.
+func mac_path(path: void*) -> str!:
+    let length = msg_size(path, sel_registerName("lengthOfBytesUsingEncoding:"), 4)
+    let bytes = msg_object(path, sel_registerName("UTF8String")) else error(failed, "the chosen path is not UTF-8")
+    return (str)u8[]((u8*)bytes, length)
+
+func mac_choose(message: str, name: str, save: bool, multiple: bool) -> interop.Owned[str]?!:
     let pool = objc_autoreleasePoolPush()
     defer objc_autoreleasePoolPop(pool)
     discard(NSApplicationDidFinishLaunchingNotification)
@@ -43,12 +50,25 @@ func mac_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
     else:
         msg_set_bool(panel, sel_registerName("setCanChooseFiles:"), true)
         msg_set_bool(panel, sel_registerName("setCanChooseDirectories:"), false)
-        msg_set_bool(panel, sel_registerName("setAllowsMultipleSelection:"), false)
+        msg_set_bool(panel, sel_registerName("setAllowsMultipleSelection:"), multiple)
     # NSModalResponseOK is 1.
     if msg_int(panel, sel_registerName("runModal")) != 1:
         return none
+    if multiple:
+        # Every chosen file, one to a line.
+        let urls = msg_object(panel, sel_registerName("URLs")) else return none
+        let count = msg_int(urls, sel_registerName("count"))
+        var joined = try strings.Builder.create()
+        defer joined.destroy()
+        var index: i64 = 0
+        while index < count:
+            let url = msg_at(urls, sel_registerName("objectAtIndex:"), (u64)index) else error(failed, "a chosen file went missing")
+            let path = msg_object(url, sel_registerName("path")) else error(failed, "the chosen file has no path")
+            if index > 0:
+                try joined.put("\n")
+            try joined.put(try mac_path(path))
+            index += 1
+        return try interop.copy_text(joined.view()) if count > 0 else none
     let url = msg_object(panel, sel_registerName("URL")) else return none
     let path = msg_object(url, sel_registerName("path")) else error(failed, "the chosen file has no path")
-    let length = msg_size(path, sel_registerName("lengthOfBytesUsingEncoding:"), 4)
-    let bytes = msg_object(path, sel_registerName("UTF8String")) else error(failed, "the chosen path is not UTF-8")
-    return try interop.copy_text((str)u8[]((u8*)bytes, length))
+    return try interop.copy_text(try mac_path(path))

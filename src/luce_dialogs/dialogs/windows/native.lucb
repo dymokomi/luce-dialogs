@@ -53,7 +53,7 @@ func win_wide(text: str) -> u16[]!:
 
 extern func GetActiveWindow() -> void*?
 
-func win_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
+func win_choose(message: str, name: str, save: bool, multiple: bool) -> interop.Owned[str]?!:
     let title = try win_wide(message)
     defer free(title) in memory.heap
     let path = try alloc u16[32768] in memory.heap
@@ -72,7 +72,7 @@ func win_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
     # Owned by the app's window, so the panel stays in front of it and is modal to it.
     var options = WinOpenFileName(size = 152, owner = GetActiveWindow(), instance = none, filter = none, custom_filter = none, custom_filter_capacity = 0, filter_index = 0,
                                   file = path.data, file_capacity = (u32)path.length, file_title = none, file_title_capacity = 0, initial_directory = none,
-                                  title = title.data, flags = 0x80800 | 0x8 | (0x2 if save else 0x1000), file_offset = 0, file_extension = 0, default_extension = none,
+                                  title = title.data, flags = 0x80800 | 0x8 | (0x2 if save else 0x1000) | (0x200 if multiple else 0), file_offset = 0, file_extension = 0, default_extension = none,
                                   custom_data = 0, hook = none, template_name = none, reserved_pointer = none, reserved = 0, flags_extra = 0)
     let chosen = GetSaveFileNameW(&options) if save else GetOpenFileNameW(&options)
     if chosen == 0:
@@ -82,11 +82,40 @@ func win_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
         length += 1
     if length == 0:
         return none
-    let needed = WideCharToMultiByte(65001, 0, path.data, (i32)length, none, 0, none, none)
+    # Several files come back as the folder, then each name, NUL-separated,
+    # a double NUL at the end; one file as its whole path.
+    if not multiple or length + 1 >= path.length or path[length + 1] == 0:
+        let whole = try win_utf8(path[..<length])
+        defer free(whole) in memory.heap
+        return try interop.copy_text((str)whole)
+    var joined = try strings.Builder.create()
+    defer joined.destroy()
+    let folder = try win_utf8(path[..<length])
+    defer free(folder) in memory.heap
+    var start = length + 1
+    var first = true
+    while start < path.length and path[start] != 0:
+        var end = start
+        while end < path.length and path[end] != 0:
+            end += 1
+        let file = try win_utf8(path[start..<end])
+        defer free(file) in memory.heap
+        if not first:
+            try joined.put("\n")
+        try joined.put((str)folder)
+        try joined.put("\\")
+        try joined.put((str)file)
+        first = false
+        start = end + 1
+    return try interop.copy_text(joined.view())
+
+## UTF-16 `wide` as UTF-8 bytes in the heap; free them there.
+func win_utf8(wide: const u16[]) -> u8[]!:
+    let needed = WideCharToMultiByte(65001, 0, wide.data, (i32)wide.length, none, 0, none, none)
     if needed <= 0:
         error(failed, "the chosen path could not be converted to UTF-8")
     let bytes = try alloc u8[(usize)needed] in memory.heap
-    defer free(bytes) in memory.heap
-    if WideCharToMultiByte(65001, 0, path.data, (i32)length, bytes.data, needed, none, none) != needed:
+    if WideCharToMultiByte(65001, 0, wide.data, (i32)wide.length, bytes.data, needed, none, none) != needed:
+        free(bytes) in memory.heap
         error(failed, "the chosen path could not be converted to UTF-8")
-    return try interop.copy_text((str)bytes)
+    return bytes

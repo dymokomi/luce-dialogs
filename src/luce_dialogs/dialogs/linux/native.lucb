@@ -9,7 +9,7 @@
 #
 #==============================================================================================
 
-func linux_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
+func linux_choose(message: str, name: str, save: bool, multiple: bool) -> interop.Owned[str]?!:
     var title_text: u8[1024]
     var name_text: u8[4200]
     let title = try format(title_text[..<1023], f"--title={message}")
@@ -17,9 +17,9 @@ func linux_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
     let suggested = try format(name_text[..<4199], f"--filename={name}")
     name_text[suggested.length] = 0
     # zenity: exit 0 with the path, 1 when cancelled; 127 when it is not installed.
-    var zenity_open: c.str[2] = ["--file-selection", (c.str)&title_text[0]]
+    var zenity_open: c.str[4] = ["--file-selection", (c.str)&title_text[0], "--multiple", "--separator=\n"]
     var zenity_save: c.str[5] = ["--file-selection", "--save", "--confirm-overwrite", (c.str)&title_text[0], (c.str)&name_text[0]]
-    let zenity = try linux_ask("zenity", zenity_save[..<5] if save else zenity_open[..<2])
+    let zenity = try linux_ask("zenity", zenity_save[..<5] if save else zenity_open[..<(4 if multiple else 2)])
     if zenity.answered:
         return zenity.path
     var message_text: u8[1024]
@@ -30,8 +30,8 @@ func linux_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
     let starting = name if name.length > 0 else "."
     let start = try format(start_text[..<4199], f"{starting}")
     start_text[start.length] = 0
-    var kdialog: c.str[4] = ["--title", (c.str)&message_text[0], "--getsavefilename" if save else "--getopenfilename", (c.str)&start_text[0]]
-    let asked = try linux_ask("kdialog", kdialog[..<4])
+    var kdialog: c.str[6] = ["--title", (c.str)&message_text[0], "--getsavefilename" if save else "--getopenfilename", (c.str)&start_text[0], "--multiple", "--separate-output"]
+    let asked = try linux_ask("kdialog", kdialog[..<(6 if multiple and not save else 4)])
     if asked.answered:
         return asked.path
     error(window.unsupported, "no file dialog helper (zenity or kdialog) is installed")
