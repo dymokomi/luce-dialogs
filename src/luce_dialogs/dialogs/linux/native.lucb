@@ -1,0 +1,58 @@
+#==============================================================================================
+#
+#   native - Linux file dialogs through the desktop's own helper
+#
+#   DESCRIPTION:
+#       GNOME's zenity, else KDE's kdialog, asks and prints the chosen path: the desktop's own
+#       panel without linking a toolkit. It runs as a child and blocks the UI thread, modal
+#       as the other platforms' panels are. Neither installed fails as unsupported.
+#
+#==============================================================================================
+
+func linux_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
+    var title_text: u8[1024]
+    var name_text: u8[4200]
+    let title = try format(title_text[..<1023], f"--title={message}")
+    title_text[title.length] = 0
+    let suggested = try format(name_text[..<4199], f"--filename={name}")
+    name_text[suggested.length] = 0
+    # zenity: exit 0 with the path, 1 when cancelled; 127 when it is not installed.
+    var zenity_open: c.str[2] = ["--file-selection", (c.str)&title_text[0]]
+    var zenity_save: c.str[5] = ["--file-selection", "--save", "--confirm-overwrite", (c.str)&title_text[0], (c.str)&name_text[0]]
+    let zenity = try linux_ask("zenity", zenity_save[..] if save else zenity_open[..])
+    if zenity.answered:
+        return zenity.path
+    var message_text: u8[1024]
+    let plain = try format(message_text[..<1023], f"{message}")
+    message_text[plain.length] = 0
+    var start_text: u8[4200]
+    let start = try format(start_text[..<4199], f"{name if name.length > 0 else \".\"}")
+    start_text[start.length] = 0
+    var kdialog: c.str[4] = ["--title", (c.str)&message_text[0], "--getsavefilename" if save else "--getopenfilename", (c.str)&start_text[0]]
+    let asked = try linux_ask("kdialog", kdialog[..])
+    if asked.answered:
+        return asked.path
+    error(window.unsupported, "no file dialog helper (zenity or kdialog) is installed")
+
+## What a helper said: whether it was there to answer, and the path chosen
+## (none when cancelled).
+struct Asked:
+    var answered: bool
+    var path: interop.Owned[str]?
+
+## Run `program` and read the path it printed.
+func linux_ask(program: c.str, arguments: const c.str[]) -> Asked!:
+    let (status, output, errors) = process.run(program, arguments) catch failure:
+        discard(failure)
+        return Asked(answered = false, path = none)
+    defer process.release(output)
+    defer process.release(errors)
+    # 127: the shell's "not found", which exec's failure gives too.
+    if status == 127:
+        return Asked(answered = false, path = none)
+    var length = output.length
+    while length > 0 and (output.bytes[length - 1] == '\n' or output.bytes[length - 1] == '\r'):
+        length -= 1
+    if status != 0 or length == 0:
+        return Asked(answered = true, path = none)
+    return Asked(answered = true, path = try interop.copy_text((str)output.bytes[..<length]))

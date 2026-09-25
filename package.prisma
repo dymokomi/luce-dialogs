@@ -4,11 +4,17 @@ def package "luce-dialogs" {
     str version = "0.1.1"
     str kind = "package"
     str language = "luce-base"
-    str description = "Native open and save file panels for Luce programs on macOS and Windows."
+    str description = "Native open and save file panels for Luce programs: macOS and Windows panels, zenity or kdialog on Linux."
     str readme = "README.md"
 
     def export "dialogs" {
         str module = "luce_dialogs.dialogs"
+    }
+
+    def dependency "luce-std" {
+        str owner = "dymokomi"
+        str version = "^0.1.0"
+        str path = "../luce-std"
     }
 
     def dependency "luce-window" {

@@ -12,6 +12,7 @@ import c
 import interop
 import memory
 import platform
+import process
 import thread
 import window
 ## The dialog could not be shown or its result could not be read.
@@ -25,6 +26,8 @@ pub func open_file(message: str) -> interop.Owned[str]?!:
         return try mac_choose(message, "", false)
     if platform.windows:
         return try win_choose(message, "", false)
+    if platform.linux:
+        return try linux_choose(message, "", false)
     error(window.unsupported, "native file dialogs are unavailable on this target")
 
 ## Ask where to save a file, suggesting `name`, with `message` above the field.
@@ -35,6 +38,8 @@ pub func save_file(message: str, name: str) -> interop.Owned[str]?!:
         return try mac_choose(message, name, true)
     if platform.windows:
         return try win_choose(message, name, true)
+    if platform.linux:
+        return try linux_choose(message, name, true)
     error(window.unsupported, "native file dialogs are unavailable on this target")
 
 func check_access() -> !:
