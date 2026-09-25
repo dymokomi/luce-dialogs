@@ -51,6 +51,8 @@ func win_wide(text: str) -> u16[]!:
     wide[(usize)count] = 0
     return wide
 
+extern func GetActiveWindow() -> void*?
+
 func win_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
     let title = try win_wide(message)
     defer free(title) in memory.heap
@@ -67,7 +69,8 @@ func win_choose(message: str, name: str, save: bool) -> interop.Owned[str]?!:
             index += 1
     # OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR, plus FILEMUSTEXIST to
     # open and OVERWRITEPROMPT to save.
-    var options = WinOpenFileName(size = 152, owner = none, instance = none, filter = none, custom_filter = none, custom_filter_capacity = 0, filter_index = 0,
+    # Owned by the app's window, so the panel stays in front of it and is modal to it.
+    var options = WinOpenFileName(size = 152, owner = GetActiveWindow(), instance = none, filter = none, custom_filter = none, custom_filter_capacity = 0, filter_index = 0,
                                   file = path.data, file_capacity = (u32)path.length, file_title = none, file_title_capacity = 0, initial_directory = none,
                                   title = title.data, flags = 0x80800 | 0x8 | (0x2 if save else 0x1000), file_offset = 0, file_extension = 0, default_extension = none,
                                   custom_data = 0, hook = none, template_name = none, reserved_pointer = none, reserved = 0, flags_extra = 0)

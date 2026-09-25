@@ -1,7 +1,7 @@
 #prisma 4.0
 def package "luce-dialogs" {
     str owner = "dymokomi"
-    str version = "0.1.0"
+    str version = "0.1.1"
     str kind = "package"
     str language = "luce-base"
     str description = "Native open and save file panels for Luce programs on macOS and Windows."
@@ -22,6 +22,6 @@ def package "luce-dialogs" {
     }
 
     def native "windows" {
-        str[] libraries = ["comdlg32"]
+        str[] libraries = ["comdlg32", "user32"]
     }
 }
