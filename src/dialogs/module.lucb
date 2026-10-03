@@ -12,10 +12,10 @@ import c
 import interop
 import memory
 import platform
-import luce_std.process
+from luce_std import process
 import strings
 import thread
-import luce_window.window
+from luce_window import window
 ## The dialog could not be shown or its result could not be read.
 pub let failed: ErrorCode = ErrorCode.package(123)
 
