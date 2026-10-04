@@ -44,11 +44,12 @@ struct Asked:
 
 ## Run `program` and read the path it printed.
 func linux_ask(program: c.str, arguments: const c.str[]) -> Asked!:
-    let (status, output, errors) = process.run(program, arguments) catch failure:
+    let ran = process.run(program, arguments) catch failure:
         discard(failure)
         return Asked(answered = false, path = none)
-    defer process.release(output)
-    defer process.release(errors)
+    defer ran.release()
+    let status = ran.value.exit_code
+    let output = ran.value.output
     # 127: the shell's "not found", which exec's failure gives too.
     if status == 127:
         return Asked(answered = false, path = none)
