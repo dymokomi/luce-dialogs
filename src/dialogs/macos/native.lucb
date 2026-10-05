@@ -37,7 +37,7 @@ func mac_path(path: void*) -> str!:
 func mac_choose(message: str, name: str, save: bool, multiple: bool) -> interop.Owned[str]?!:
     let pool = objc_autoreleasePoolPush()
     defer objc_autoreleasePoolPop(pool)
-    discard(NSApplicationDidFinishLaunchingNotification)
+    _ = NSApplicationDidFinishLaunchingNotification
     let native_type = objc_getClass("NSSavePanel" if save else "NSOpenPanel") else error(failed, "AppKit panels are unavailable")
     let panel = msg_object(native_type, sel_registerName("savePanel" if save else "openPanel")) else error(failed, "could not create the file panel")
     let caption = try mac_text(message)

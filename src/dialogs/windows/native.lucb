@@ -41,7 +41,7 @@ extern func GetSaveFileNameW(options: WinOpenFileName*) -> i32
 
 ## `text` as a NUL-terminated UTF-16 buffer, allocated in the heap.
 func win_wide(text: str) -> u16[]!:
-    let wide = try alloc u16[text.length + 1] in memory.heap
+    let wide = try new u16[text.length + 1] --- in memory.heap
     var count: i32 = 0
     if text.length > 0:
         count = MultiByteToWideChar(65001, 8, (c.str)text, (i32)text.length, wide.data, (i32)wide.length - 1)
@@ -56,7 +56,7 @@ extern func GetActiveWindow() -> void*?
 func win_choose(message: str, name: str, save: bool, multiple: bool) -> interop.Owned[str]?!:
     let title = try win_wide(message)
     defer free(title) in memory.heap
-    let path = try alloc u16[32768] in memory.heap
+    let path = try new u16[32768] --- in memory.heap
     defer free(path) in memory.heap
     for index in 0..<path.length:
         path[index] = 0
@@ -114,7 +114,7 @@ func win_utf8(wide: const u16[]) -> u8[]!:
     let needed = WideCharToMultiByte(65001, 0, wide.data, (i32)wide.length, none, 0, none, none)
     if needed <= 0:
         error(failed, "the chosen path could not be converted to UTF-8")
-    let bytes = try alloc u8[(usize)needed] in memory.heap
+    let bytes = try new u8[(usize)needed] --- in memory.heap
     if WideCharToMultiByte(65001, 0, wide.data, (i32)wide.length, bytes.data, needed, none, none) != needed:
         free(bytes) in memory.heap
         error(failed, "the chosen path could not be converted to UTF-8")
