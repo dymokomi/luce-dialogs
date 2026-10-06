@@ -3,8 +3,8 @@
 #   native - NSOpenPanel and NSSavePanel
 #
 #   DESCRIPTION:
-#       AppKit's panels, run modally. The panel is autoreleased; its chosen URL's path is
-#       copied out before the pool drains.
+#       AppKit's panels, run modally. An open panel chooses files, or folders only. The
+#       panel is autoreleased; its chosen URL's path is copied out before the pool drains.
 #
 #==============================================================================================
 
@@ -34,7 +34,7 @@ func mac_path(path: void*) -> str!:
     let bytes = msg_object(path, sel_registerName("UTF8String")) else error(failed, "the chosen path is not UTF-8")
     return (str)u8[]((u8*)bytes, length)
 
-func mac_choose(message: str, name: str, save: bool, multiple: bool) -> interop.Owned[str]?!:
+func mac_choose(message: str, name: str, save: bool, multiple: bool, folders: bool = false) -> interop.Owned[str]?!:
     let pool = objc_autoreleasePoolPush()
     defer objc_autoreleasePoolPop(pool)
     _ = NSApplicationDidFinishLaunchingNotification
@@ -48,8 +48,8 @@ func mac_choose(message: str, name: str, save: bool, multiple: bool) -> interop.
         defer msg_release(suggested, sel_registerName("release"))
         msg_set_object(panel, sel_registerName("setNameFieldStringValue:"), suggested)
     else:
-        msg_set_bool(panel, sel_registerName("setCanChooseFiles:"), true)
-        msg_set_bool(panel, sel_registerName("setCanChooseDirectories:"), false)
+        msg_set_bool(panel, sel_registerName("setCanChooseFiles:"), not folders)
+        msg_set_bool(panel, sel_registerName("setCanChooseDirectories:"), folders)
         msg_set_bool(panel, sel_registerName("setAllowsMultipleSelection:"), multiple)
     # NSModalResponseOK is 1.
     if msg_int(panel, sel_registerName("runModal")) != 1:

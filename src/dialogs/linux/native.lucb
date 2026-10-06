@@ -3,13 +3,14 @@
 #   native - Linux file dialogs through the desktop's own helper
 #
 #   DESCRIPTION:
-#       GNOME's zenity, else KDE's kdialog, asks and prints the chosen path: the desktop's own
+#       GNOME's zenity, else KDE's kdialog, asks and prints the chosen path (a file's, or a
+#       folder's with zenity's --directory and kdialog's --getexistingdirectory): the desktop's own
 #       panel without linking a toolkit. It runs as a child and blocks the UI thread, modal
 #       as the other platforms' panels are. Neither installed fails as unsupported.
 #
 #==============================================================================================
 
-func linux_choose(message: str, name: str, save: bool, multiple: bool) -> interop.Owned[str]?!:
+func linux_choose(message: str, name: str, save: bool, multiple: bool, folders: bool = false) -> interop.Owned[str]?!:
     var title_text: u8[1024]
     var name_text: u8[4200]
     let title = try strings.format(title_text[..<1023], f"--title={message}")
@@ -19,7 +20,8 @@ func linux_choose(message: str, name: str, save: bool, multiple: bool) -> intero
     # zenity: exit 0 with the path, 1 when cancelled; 127 when it is not installed.
     var zenity_open: c.str[4] = ["--file-selection", (c.str)&title_text[0], "--multiple", "--separator=\n"]
     var zenity_save: c.str[5] = ["--file-selection", "--save", "--confirm-overwrite", (c.str)&title_text[0], (c.str)&name_text[0]]
-    let zenity = try linux_ask("zenity", zenity_save[..<5] if save else zenity_open[..<(4 if multiple else 2)])
+    var zenity_folder: c.str[3] = ["--file-selection", "--directory", (c.str)&title_text[0]]
+    let zenity = try linux_ask("zenity", zenity_folder[..<3] if folders else (zenity_save[..<5] if save else zenity_open[..<(4 if multiple else 2)]))
     if zenity.answered:
         return zenity.path
     var message_text: u8[1024]
@@ -30,8 +32,9 @@ func linux_choose(message: str, name: str, save: bool, multiple: bool) -> intero
     let starting = name if name.length > 0 else "."
     let start = try strings.format(start_text[..<4199], f"{starting}")
     start_text[start.length] = 0
-    var kdialog: c.str[6] = ["--title", (c.str)&message_text[0], "--getsavefilename" if save else "--getopenfilename", (c.str)&start_text[0], "--multiple", "--separate-output"]
-    let asked = try linux_ask("kdialog", kdialog[..<(6 if multiple and not save else 4)])
+    let asking: c.str = "--getexistingdirectory" if folders else ("--getsavefilename" if save else "--getopenfilename")
+    var kdialog: c.str[6] = ["--title", (c.str)&message_text[0], asking, (c.str)&start_text[0], "--multiple", "--separate-output"]
+    let asked = try linux_ask("kdialog", kdialog[..<(6 if multiple and not save and not folders else 4)])
     if asked.answered:
         return asked.path
     error(window.unsupported, "no file dialog helper (zenity or kdialog) is installed")

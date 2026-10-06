@@ -43,6 +43,18 @@ pub func open_files(message: str) -> interop.Owned[str]?!:
         return try linux_choose(message, "", false, true)
     error(window.unsupported, "native file dialogs are unavailable on this target")
 
+## Ask for an existing folder, with `message` above the panel. Returns the chosen
+## folder's path, or none when the dialog was cancelled.
+pub func choose_folder(message: str) -> interop.Owned[str]?!:
+    try check_access()
+    if platform.macos:
+        return try mac_choose(message, "", false, false, folders = true)
+    if platform.windows:
+        return try win_choose_folder(message)
+    if platform.linux:
+        return try linux_choose(message, "", false, false, folders = true)
+    error(window.unsupported, "native file dialogs are unavailable on this target")
+
 ## Ask where to save a file, suggesting `name`, with `message` above the field.
 ## Returns the chosen path, or none when the dialog was cancelled.
 pub func save_file(message: str, name: str) -> interop.Owned[str]?!:

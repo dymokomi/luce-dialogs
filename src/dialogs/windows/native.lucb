@@ -1,10 +1,11 @@
 #==============================================================================================
 #
-#   native - GetOpenFileNameW and GetSaveFileNameW
+#   native - GetOpenFileNameW, GetSaveFileNameW and SHBrowseForFolderW
 #
 #   DESCRIPTION:
-#       The common dialogs of comdlg32, run modally. Text crosses as UTF-16; the chosen path
-#       comes back in the caller's buffer and is copied out as UTF-8.
+#       The common dialogs of comdlg32 and shell32's folder browser, run modally. Text
+#       crosses as UTF-16; the chosen path comes back in the caller's buffer and is copied
+#       out as UTF-8.
 #
 #==============================================================================================
 
@@ -108,6 +109,49 @@ func win_choose(message: str, name: str, save: bool, multiple: bool) -> interop.
         first = false
         start = end + 1
     return try interop.copy_text(joined.view())
+
+## BROWSEINFOW, as shell32 lays it out for x64.
+extern struct WinBrowseInfo:
+    owner: void*?
+    root: void*?
+    display_name: u16*?
+    title: u16*?
+    flags: u32
+    callback: void*?
+    parameter: isize
+    image: i32
+
+extern func SHBrowseForFolderW(info: WinBrowseInfo*) -> void*?
+extern func SHGetPathFromIDListW(list: void*, path: u16*) -> i32
+extern func CoTaskMemFree(memory: void*?)
+extern func CoInitializeEx(reserved: void*?, mode: u32) -> i32
+
+## Ask for a folder in shell32's browser: the new-style dialog, folders of the file
+## system only, owned by the app's window.
+func win_choose_folder(message: str) -> interop.Owned[str]?!:
+    # The new-style browser needs COM; a second initialization on this thread is harmless.
+    _ = CoInitializeEx(none, 0x2)
+    let title = try win_wide(message)
+    defer free(title) in memory.heap
+    let path = try new u16[32768] --- in memory.heap
+    defer free(path) in memory.heap
+    for index in 0..<path.length:
+        path[index] = 0
+    # BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX.
+    var info = WinBrowseInfo(owner = GetActiveWindow(), root = none, display_name = none, title = title.data, flags = 0x1 | 0x40 | 0x10,
+                             callback = none, parameter = 0, image = 0)
+    let chosen = SHBrowseForFolderW(&info) else return none
+    defer CoTaskMemFree(chosen)
+    if SHGetPathFromIDListW(chosen, path.data) == 0:
+        return none
+    var length: usize = 0
+    while length < path.length and path[length] != 0:
+        length += 1
+    if length == 0:
+        return none
+    let whole = try win_utf8(path[..<length])
+    defer free(whole) in memory.heap
+    return try interop.copy_text((str)whole)
 
 ## UTF-16 `wide` as UTF-8 bytes in the heap; free them there.
 func win_utf8(wide: const u16[]) -> u8[]!:

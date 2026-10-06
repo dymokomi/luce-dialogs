@@ -1,6 +1,22 @@
 # luce-dialogs
 
-Native open and save file panels.
+Native panels for choosing files and folders: the desktop's own, run modally
+from the UI thread.
+
+```luce
+from luce_dialogs import dialogs
+
+let photo = dialogs.open_file("Choose a photo") else return        # one file, or none when cancelled
+let several = dialogs.open_files("Choose photos") else return      # paths, one a line
+let folder = dialogs.choose_folder("Choose a folder") else return  # a folder
+let target = dialogs.save_file("Save as", "untitled.png") else return
+```
+
+| function | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| `open_file`, `open_files` | NSOpenPanel | GetOpenFileNameW | zenity, else kdialog |
+| `choose_folder` | NSOpenPanel, folders only | SHBrowseForFolderW | `zenity --directory`, else `kdialog --getexistingdirectory` |
+| `save_file` | NSSavePanel | GetSaveFileNameW | zenity, else kdialog |
 
 ## Modules
 
@@ -15,7 +31,6 @@ Add the dependency to `package.prisma`; the modules keep their short names:
 ```prisma
 def dependency "luce-dialogs" {
     str owner = "dymokomi"
-    str version = "^0.1.0"
 }
 ```
 
@@ -25,12 +40,13 @@ def dependency "luce-dialogs" {
 
 ## Platforms
 
-macOS and Windows.
+macOS, Windows, and Linux through the desktop's helper (zenity or kdialog,
+whichever is installed).
 
 Native libraries it links, by platform (declared in `package.prisma`, linked only when the program reaches code that needs them):
 
 - macos: AppKit, Foundation
-- windows: comdlg32
+- windows: comdlg32, user32, shell32, ole32
 
 ## Tests
 

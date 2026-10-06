@@ -23,6 +23,6 @@ def package "luce-dialogs" {
     }
 
     def native "windows" {
-        str[] libraries = ["comdlg32", "user32"]
+        str[] libraries = ["comdlg32", "user32", "shell32", "ole32"]
     }
 }
