@@ -1,7 +1,7 @@
 #prisma 4.0
 def package "luce-dialogs" {
     str owner = "dymokomi"
-    str version = "0.5.0"
+    str version = "0.6.0"
     str kind = "package"
     str language = "luce-base"
     str description = "Native open and save file panels for Luce programs: macOS and Windows panels, zenity or kdialog on Linux."
