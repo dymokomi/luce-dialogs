@@ -89,7 +89,7 @@ func win_choose(message: str, name: str, save: bool, multiple: bool) -> interop.
         let whole = try win_utf8(path[..<length])
         defer free(whole) in memory.heap
         return try interop.copy_text((str)whole)
-    var joined = try strings.Builder.create()
+    var joined: collections.Buffer
     defer joined.destroy()
     let folder = try win_utf8(path[..<length])
     defer free(folder) in memory.heap
@@ -102,13 +102,13 @@ func win_choose(message: str, name: str, save: bool, multiple: bool) -> interop.
         let file = try win_utf8(path[start..<end])
         defer free(file) in memory.heap
         if not first:
-            try joined.put("\n")
-        try joined.put((str)folder)
-        try joined.put("\\")
-        try joined.put((str)file)
+            try joined.put_text("\n")
+        try joined.put_text((str)folder)
+        try joined.put_text("\\")
+        try joined.put_text((str)file)
         first = false
         start = end + 1
-    return try interop.copy_text(joined.view())
+    return try interop.copy_text(joined.text())
 
 ## BROWSEINFOW, as shell32 lays it out for x64.
 extern struct WinBrowseInfo:

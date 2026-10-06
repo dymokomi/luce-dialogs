@@ -58,17 +58,17 @@ func mac_choose(message: str, name: str, save: bool, multiple: bool, folders: bo
         # Every chosen file, one to a line.
         let urls = msg_object(panel, sel_registerName("URLs")) else return none
         let count = msg_int(urls, sel_registerName("count"))
-        var joined = try strings.Builder.create()
+        var joined: collections.Buffer
         defer joined.destroy()
         var index: i64 = 0
         while index < count:
             let url = msg_at(urls, sel_registerName("objectAtIndex:"), (u64)index) else error(failed, "a chosen file went missing")
             let path = msg_object(url, sel_registerName("path")) else error(failed, "the chosen file has no path")
             if index > 0:
-                try joined.put("\n")
-            try joined.put(try mac_path(path))
+                try joined.put_text("\n")
+            try joined.put_text(try mac_path(path))
             index += 1
-        return try interop.copy_text(joined.view()) if count > 0 else none
+        return try interop.copy_text(joined.text()) if count > 0 else none
     let url = msg_object(panel, sel_registerName("URL")) else return none
     let path = msg_object(url, sel_registerName("path")) else error(failed, "the chosen file has no path")
     return try interop.copy_text(try mac_path(path))
