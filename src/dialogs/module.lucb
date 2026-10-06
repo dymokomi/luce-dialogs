@@ -13,6 +13,7 @@ import interop
 import memory
 import platform
 from luce_std import process
+from luce_std import files
 import strings
 import thread
 from luce_window import window

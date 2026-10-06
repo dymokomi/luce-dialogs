@@ -6,7 +6,9 @@
 #       GNOME's zenity, else KDE's kdialog, asks and prints the chosen path (a file's, or a
 #       folder's with zenity's --directory and kdialog's --getexistingdirectory): the desktop's own
 #       panel without linking a toolkit. It runs as a child and blocks the UI thread, modal
-#       as the other platforms' panels are. Neither installed fails as unsupported.
+#       as the other platforms' panels are, and starts in the home folder (a save at the
+#       suggested name there). Neither installed fails as unsupported; a helper that
+#       is there but fails (killed, no display) fails as such, not as a cancel.
 #
 #==============================================================================================
 
@@ -15,22 +17,26 @@ func linux_choose(message: str, name: str, save: bool, multiple: bool, folders: 
     var name_text: u8[4200]
     let title = try strings.format(title_text[..<1023], f"--title={message}")
     title_text[title.length] = 0
-    let suggested = try strings.format(name_text[..<4199], f"--filename={name}")
+    # The home folder, where both helpers start: the app's working folder may be
+    # `/` or its bundle when the desktop launched it.
+    let home = files.home_directory() catch failure:
+        recover interop.Owned[str](".")
+    defer home.release()
+    let suggested = try strings.format(name_text[..<4199], f"--filename={home.value}/{name}")
     name_text[suggested.length] = 0
     # zenity: exit 0 with the path, 1 when cancelled; 127 when it is not installed.
-    var zenity_open: c.str[4] = ["--file-selection", (c.str)&title_text[0], "--multiple", "--separator=\n"]
+    var zenity_open: c.str[5] = ["--file-selection", (c.str)&title_text[0], (c.str)&name_text[0], "--multiple", "--separator=\n"]
     var zenity_save: c.str[5] = ["--file-selection", "--save", "--confirm-overwrite", (c.str)&title_text[0], (c.str)&name_text[0]]
-    var zenity_folder: c.str[3] = ["--file-selection", "--directory", (c.str)&title_text[0]]
-    let zenity = try linux_ask("zenity", zenity_folder[..<3] if folders else (zenity_save[..<5] if save else zenity_open[..<(4 if multiple else 2)]))
+    var zenity_folder: c.str[4] = ["--file-selection", "--directory", (c.str)&title_text[0], (c.str)&name_text[0]]
+    let zenity = try linux_ask("zenity", zenity_folder[..<4] if folders else (zenity_save[..<5] if save else zenity_open[..<(5 if multiple else 3)]))
     if zenity.answered:
         return zenity.path
     var message_text: u8[1024]
     let plain = try strings.format(message_text[..<1023], f"{message}")
     message_text[plain.length] = 0
     var start_text: u8[4200]
-    # kdialog starts in the folder given, or at the suggested name.
-    let starting = name if name.length > 0 else "."
-    let start = try strings.format(start_text[..<4199], f"{starting}")
+    # kdialog starts at the suggested name, or in the home folder.
+    let start = try strings.format(start_text[..<4199], f"{home.value}/{name}" if name.length > 0 else f"{home.value}")
     start_text[start.length] = 0
     let asking: c.str = "--getexistingdirectory" if folders else ("--getsavefilename" if save else "--getopenfilename")
     var kdialog: c.str[6] = ["--title", (c.str)&message_text[0], asking, (c.str)&start_text[0], "--multiple", "--separate-output"]
@@ -56,9 +62,14 @@ func linux_ask(program: c.str, arguments: const c.str[]) -> Asked!:
     # 127: the shell's "not found", which exec's failure gives too.
     if status == 127:
         return Asked(answered = false, path = none)
+    # 1 is a cancel; anything else but 0 is the helper failing (killed, no display).
+    if status == 1:
+        return Asked(answered = true, path = none)
+    if status != 0:
+        error(failed, "the desktop's file dialog helper failed")
     var length = output.length
     while length > 0 and (output.bytes[length - 1] == '\n' or output.bytes[length - 1] == '\r'):
         length -= 1
-    if status != 0 or length == 0:
+    if length == 0:
         return Asked(answered = true, path = none)
     return Asked(answered = true, path = try interop.copy_text((str)output.bytes[..<length]))
