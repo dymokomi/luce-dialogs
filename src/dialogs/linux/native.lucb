@@ -64,9 +64,11 @@ func linux_ask(program: c.str, arguments: const c.str[]) -> Asked!:
     if status == 127:
         return Asked(answered = false, path = none)
     # 1 is a cancel, except that zenity exits 1 too when it cannot open a
-    # display, which it says on its error output.
+    # display, which it says on its error output: "cannot open display" (GTK 3),
+    # "Failed to open display" (GTK 4). With the desktop portal, GTK 4's zenity
+    # needs no display of its own, so this is rare there.
     if status == 1:
-        if contains(ran.value.error_output, "cannot open display"):
+        if contains(ran.value.error_output, "open display"):
             error(failed, "the desktop's file dialog helper cannot open a display")
         return Asked(answered = true, path = none)
     if status != 0:
