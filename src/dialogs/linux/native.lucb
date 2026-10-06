@@ -53,17 +53,21 @@ struct Asked:
 
 ## Run `program` and read the path it printed.
 func linux_ask(program: c.str, arguments: const c.str[]) -> Asked!:
+    # A helper that is not installed exits 127 (exec's failure); run itself
+    # fails only when the helper does (killed by a signal, no pipe, no fork).
     let ran = process.run(program, arguments) catch failure:
         _ = failure
-        return Asked(answered = false, path = none)
+        error(failed, "the desktop's file dialog helper failed")
     defer ran.release()
     let status = ran.value.exit_code
     let output = ran.value.output
-    # 127: the shell's "not found", which exec's failure gives too.
     if status == 127:
         return Asked(answered = false, path = none)
-    # 1 is a cancel; anything else but 0 is the helper failing (killed, no display).
+    # 1 is a cancel, except that zenity exits 1 too when it cannot open a
+    # display, which it says on its error output.
     if status == 1:
+        if contains(ran.value.error_output, "cannot open display"):
+            error(failed, "the desktop's file dialog helper cannot open a display")
         return Asked(answered = true, path = none)
     if status != 0:
         error(failed, "the desktop's file dialog helper failed")
@@ -73,3 +77,12 @@ func linux_ask(program: c.str, arguments: const c.str[]) -> Asked!:
     if length == 0:
         return Asked(answered = true, path = none)
     return Asked(answered = true, path = try interop.copy_text((str)output.bytes[..<length]))
+
+## Whether `text` holds `part`.
+func contains(text: str, part: str) -> bool:
+    if part.length > text.length:
+        return false
+    for at in 0..=text.length - part.length:
+        if (str)text.bytes[at..<at + part.length] == part:
+            return true
+    return false
