@@ -50,7 +50,7 @@ Native libraries it links, by platform (declared in `package.prisma`, linked onl
 
 ## Tests
 
-`./test.sh` runs every module's `test` blocks and the unit tests through the native and C backends, then the program checks under `tests/programs`. It expects the compiler beside this checkout at `../luce-base/build/luce-base` (or `--base PATH`).
+`luc test` runs the tests in `tests/dialogs/`: how a Linux helper's answer is read, with a shell standing in for zenity and kdialog, and the refusal of a dialog off the UI thread. A panel itself needs a person to answer it, so it is not tested.
 
 ## License
 

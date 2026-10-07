@@ -1,0 +1,55 @@
+## What can be checked without showing a panel: how a Linux helper's answer is read (a
+## shell stands in for zenity and kdialog), and that a dialog off the UI thread is refused.
+
+## `linux_ask` running `sh -c script`, as a helper that printed and exited as the script does.
+func helper(script: c.str) -> Asked!:
+    var arguments: c.str[2] = ["-c", script]
+    return try linux_ask("sh", arguments)
+
+test "a helper's printed path is the choice, without its line end":
+    if platform.windows: return
+    let asked = try helper("printf '/home/me/notes.txt\\n'")
+    assert(asked.answered)
+    let path = asked.path else error(failed, "no path")
+    defer path.release()
+    assert(path.value == "/home/me/notes.txt")
+
+test "a helper that exits 1 or prints nothing was cancelled":
+    if platform.windows: return
+    let cancelled = try helper("exit 1")
+    assert(cancelled.answered and cancelled.path == none)
+    let empty = try helper("printf '\\n'")
+    assert(empty.answered and empty.path == none)
+
+test "a helper that is not installed did not answer":
+    if platform.windows: return
+    let missing = try helper("exit 127")
+    assert(not missing.answered)
+
+test "a helper that cannot open a display or fails otherwise is a failure, not a cancel":
+    if platform.windows: return
+    var failures = 0
+    _ = helper("echo 'cannot open display' 1>&2; exit 1") catch failure:
+        if failure.code == failed: failures += 1
+        recover Asked(answered = false, path = none)
+    _ = helper("exit 3") catch failure:
+        if failure.code == failed: failures += 1
+        recover Asked(answered = false, path = none)
+    assert(failures == 2)
+
+test "contains finds a part anywhere, and not a longer one":
+    assert(contains("Failed to open display", "open display"))
+    assert(not contains("open", "open display") and contains("abc", ""))
+
+## Off the UI thread: the code `open_file` fails with, for the test below.
+func off_main(raw: void*?):
+    let code = (ErrorCode*)(raw else return)
+    _ = open_file("never shown") catch failure:
+        *code = failure.code
+        recover none
+
+test "a dialog asked for off the UI thread is refused":
+    var code = failed
+    let worker = try thread.spawn(off_main, (void*)&code)
+    try worker.join()
+    assert(code == window.wrong_thread)
