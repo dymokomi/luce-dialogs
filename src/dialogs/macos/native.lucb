@@ -3,10 +3,19 @@
 #   native - NSOpenPanel and NSSavePanel
 #
 #   DESCRIPTION:
-#       AppKit's panels, run modally. An open panel chooses files, or folders only. The
-#       panel is autoreleased; its chosen URL's path is copied out before the pool drains.
+#       AppKit's panels, run modally. An open panel chooses files, or folders only. Its chosen
+#       URL's path is copied out before the pool drains.
+#
+#       Making a panel is slow: AppKit's first NSOpenPanel takes about 260 ms on an M4 Max,
+#       later ones about 100 ms, while showing a panel kept from before takes about 20 ms. So
+#       each kind of panel is made once, kept for the process and set up afresh on every use,
+#       and `mac_prepare` makes the open panel ahead of time, when the app is idle.
 #
 #==============================================================================================
+
+## The panels made so far, kept (retained) for the process: open, save.
+var mac_open_panel: void*? = none
+var mac_save_panel: void*? = none
 
 extern func objc_getClass(name: c.str) -> void*?
 extern func sel_registerName(name: c.str) -> void*
@@ -34,12 +43,31 @@ func mac_path(path: void*) -> str!:
     let bytes = msg_object(path, sel_registerName("UTF8String")) else error(failed, "the chosen path is not UTF-8")
     return (str)u8[]((u8*)bytes, length)
 
+## The kept open (or save) panel, made and retained on first use.
+func mac_panel(save: bool) -> void*!:
+    if let kept = (mac_save_panel if save else mac_open_panel):
+        return kept
+    _ = NSApplicationDidFinishLaunchingNotification
+    let native_type = objc_getClass("NSSavePanel" if save else "NSOpenPanel") else error(failed, "AppKit panels are unavailable")
+    let made = msg_object(native_type, sel_registerName("savePanel" if save else "openPanel")) else error(failed, "could not create the file panel")
+    # Autoreleased: retained, it outlives the pool it was made in.
+    _ = msg_object(made, sel_registerName("retain"))
+    if save:
+        mac_save_panel = made
+    else:
+        mac_open_panel = made
+    return made
+
+## Make the open panel now, so the first open dialog shows at once.
+func mac_prepare() -> !:
+    let pool = objc_autoreleasePoolPush()
+    defer objc_autoreleasePoolPop(pool)
+    _ = try mac_panel(false)
+
 func mac_choose(message: str, name: str, save: bool, multiple: bool, folders: bool = false) -> interop.Owned[str]?!:
     let pool = objc_autoreleasePoolPush()
     defer objc_autoreleasePoolPop(pool)
-    _ = NSApplicationDidFinishLaunchingNotification
-    let native_type = objc_getClass("NSSavePanel" if save else "NSOpenPanel") else error(failed, "AppKit panels are unavailable")
-    let panel = msg_object(native_type, sel_registerName("savePanel" if save else "openPanel")) else error(failed, "could not create the file panel")
+    let panel = try mac_panel(save)
     let caption = try mac_text(message)
     defer msg_release(caption, sel_registerName("release"))
     msg_set_object(panel, sel_registerName("setMessage:"), caption)

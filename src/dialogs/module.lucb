@@ -69,6 +69,15 @@ pub func save_file(message: str, name: str) -> interop.Owned[str]?!:
         return try linux_choose(message, name, true, false)
     error(window.unsupported, "native file dialogs are unavailable on this target")
 
+## Get the open dialog ready ahead of time, so the first `open_file`,
+## `open_files` or `choose_folder` shows at once. On macOS this makes AppKit's
+## open panel, which takes about a quarter of a second the first time: call it
+## when the app is idle, after its window first shows. Elsewhere it does nothing.
+pub func prepare() -> !:
+    try check_access()
+    if platform.macos:
+        try mac_prepare()
+
 func check_access() -> !:
     if not thread.is_main():
         error(window.wrong_thread, "file dialogs belong to the UI thread")

@@ -53,3 +53,15 @@ test "a dialog asked for off the UI thread is refused":
     let worker = try thread.spawn(off_main, (void*)&code)
     try worker.join()
     assert(code == window.wrong_thread)
+
+## Off the UI thread: the code `prepare` fails with.
+func prepare_off_main(raw: void*?):
+    let code = (ErrorCode*)(raw else return)
+    prepare() catch failure:
+        *code = failure.code
+
+test "getting a dialog ready off the UI thread is refused too":
+    var code = failed
+    let worker = try thread.spawn(prepare_off_main, (void*)&code)
+    try worker.join()
+    assert(code == window.wrong_thread)
